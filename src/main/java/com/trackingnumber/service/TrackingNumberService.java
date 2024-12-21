@@ -1,26 +1,18 @@
 package com.trackingnumber.service;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.trackingnumber.model.TrackingNumberEntity;
-import com.trackingnumber.model.TrackingNumberResponse;
 import com.trackingnumber.repository.TrackingNumberRepository;
 
+import java.time.OffsetDateTime;
+import java.util.UUID;
 
 @Service
 public class TrackingNumberService {
 
-    private final Set<String> generatedNumbers = ConcurrentHashMap.newKeySet();
-
-    
     private final TrackingNumberRepository trackingNumberRepository;
 
     @Autowired
@@ -28,49 +20,35 @@ public class TrackingNumberService {
         this.trackingNumberRepository = trackingNumberRepository;
     }
 
-    
-    public TrackingNumberResponse generateTrackingNumber(
-            String originCountryId, String destinationCountryId, BigDecimal weight, String createdAt, 
-            String customerId, String customerName, String customerSlug) {
-
-        // Generate unique tracking number
-        String trackingNumber = generateUniqueTrackingNumber(originCountryId, destinationCountryId, customerId);
-
-        OffsetDateTime createdAt1 = OffsetDateTime.now();
-
-        // Persist the tracking number
-        saveTrackingNumber(trackingNumber, originCountryId, destinationCountryId, weight, createdAt1, customerId);
-
-        // Return response with tracking number and createdAt timestamp
-        return new TrackingNumberResponse(trackingNumber, createdAt1);
-    }
-
-    // Method to generate a unique tracking number based on origin, destination, and customerId
-    private String generateUniqueTrackingNumber(String origin, String destination, String customerId) {
-        String base = origin + destination + customerId + UUID.randomUUID();
-        String trackingNumber = base.toUpperCase().substring(0, Math.min(base.length(), 16));
-
-        // Check for uniqueness at the database level
-        while (trackingNumberRepository.existsByTrackingNumber(trackingNumber)) {
-            // If the number exists, regenerate a new one
-            base = origin + destination + customerId + UUID.randomUUID();
-            trackingNumber = base.toUpperCase().substring(0, Math.min(base.length(), 16));
+    // Method to generate a unique tracking number
+    @Transactional
+    public String generateTrackingNumber(String originCountryId, String destinationCountryId, 
+                                         String weight, String createdAt, String customerId, 
+                                         String customerName, String customerSlug) {
+        String trackingNumber = createTrackingNumber(originCountryId, destinationCountryId, weight, customerSlug);
+System.out.println(trackingNumber);
+        // Check if tracking number exists in database
+        if (trackingNumberRepository.existsByTrackingNumber(trackingNumber)) {
+            // If it exists, regenerate a new tracking number
+            return generateTrackingNumber(originCountryId, destinationCountryId, weight, createdAt, customerId, customerName, customerSlug);
         }
+
+        // Save the tracking number to the database
+        TrackingNumberEntity entity = new TrackingNumberEntity();
+        entity.setTrackingNumber(trackingNumber);
+        entity.setCreatedAt(OffsetDateTime.now());
+        entity.setCustomerId(customerId);
+        trackingNumberRepository.save(entity);
 
         return trackingNumber;
     }
 
-    // Method to save generated tracking number in the database
-    private void saveTrackingNumber(String trackingNumber, String originCountryId, String destinationCountryId, 
-                                    BigDecimal weight, OffsetDateTime createdAt, String customerId) {
-        TrackingNumberEntity entity = new TrackingNumberEntity();
-        entity.setTrackingNumber(trackingNumber);
-        //entity.setOriginCountryId(originCountryId);
-       // entity.setDestinationCountryId(destinationCountryId);
-        //entity.setWeight(weight);
-        entity.setCreatedAt(createdAt);
-
-        // Save entity to database
-        trackingNumberRepository.save(entity);
+    // Helper method to create a tracking number using the input data
+    private String createTrackingNumber(String originCountryId, String destinationCountryId, 
+                                        String weight, String customerSlug) {
+       // String base = originCountryId + destinationCountryId + customerSlug;
+       // String uniquePart = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        //return (base + uniquePart).substring(0, 16);  // Ensure the tracking number length is <= 16
+    	return originCountryId + destinationCountryId + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
     }
 }
